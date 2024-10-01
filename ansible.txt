@@ -1,0 +1,262 @@
+ 1.Scenario: Your organization uses Ansible to manage configurations across multiple servers. 
+After deploying a new configuration, you notice that some servers are drifting from the desired state defined in your Ansible playbooks.
+
+Questions:
+1.	How would you identify which servers have drifted from the desired configuration?
+
+ansible all -i hosts -m ping
+
+check
+
+定期执行
+
+ansible localhost -m ping
+
+ansible-galaxy install systemli.drift
+
+2.	What strategies would you employ to ensure that configuration drift is detected and corrected automatically?
+
+判断是否在线
+软件版本是否一致
+不一致则更新
+
+
+
+3.	How would you modify your Ansible playbooks to prevent future configuration drift?
+
+use when 取判断条件
+
+
+
+
+2.Scenario: You need to manage sensitive data, such as API keys and passwords, in your Ansible playbooks. 
+The data should be kept secure while still being accessible to your playbooks during execution.
+
+Questions:
+1.	How would you securely manage sensitive data in Ansible?
+
+Ansible有一个叫做Ansible Vault的解决方案。
+Vault允许您加密任何Yaml文件，通常将其作用与变量文件，Vault不会加密文件和模板，只能使用Yaml文件。
+在创建加密文件时，系统会询问您必须使用的密码，以便稍后在调用角色或Playbook时进行编辑。
+将密码保存在安全的地方
+
+2.	What tools or techniques would you use to avoid exposing sensitive information in your playbooks or logs?
+
+创建新用户并设置密码时，我使用Vault 。在用户角色中，您可以设置带有用户密码和公钥的变量文件，以添加到用户的authorized_keys文件（从而提供SSH访问权限）。公共SSH密钥在技术上是安全的，一般公众可以看到 - 所有人都可以使用它来允许你访问自己的服务器。在没有配对私钥的情况下，公钥是不能获得系统访问权限的，我们没有将密钥加入此角色。
+以下是可以使用Vault创建和加密的示例变量文件。在编辑它时，它是纯文本。
+
+这些任务使用该user模块来创建新用户，传递变量文件中设置的密码。
+它还使用该authorized_key模块将SSH公钥作为SSH授权密钥添加到每个用户的服务器中。
+加密变量的使用像在常规任务文件中使用一样。但是，为了运行此角色，我们需要告诉Ansible请求输入vault密码，以便它可以解密变量。
+编辑我们的server.ymlPlaybook文件，调用user角色：
+
+要运行此Playbook，我们需要告知Ansible请求vault的密码，因为我们正在运行包含加密文件的角色：
+
+
+3.	How would you integrate secrets management with Ansible in a CI/CD pipeline?
+
+Scanning scripts and source code regularly for vulnerabilities, especially right before deployment.
+Using password managers to rotate passwords after each use.
+Ensuring authentication is correct for both human and non-human entities.
+
+
+
+
+
+
+
+
+3.Scenario: A recently updated Ansible playbook fails during execution on some servers, but the failure is inconsistent and difficult to reproduce.
+Questions:
+1.	How would you approach debugging an Ansible playbook that fails intermittently?
+
+Verbose Output: Running playbooks with increased verbosity can give you more information about what Ansible is doing. Use -v, -vv, -vvv, or -vvvv with the ansible-playbook command to increase the level of verbosity.
+
+The debug Module: This module can print statements during playbook execution, which can be very helpful for showing values of variables and understanding the flow of execution.
+
+Using --check and --diff Modes: Running playbooks in check mode simulates changes without making them, which is useful for testing. diff mode shows what changes would be made to the files, which is handy for config management.
+
+
+2.	What information would you gather to diagnose the issue?
+
+使用-V模式找到错误位置，然后添加debug输出，查看错误原因
+
+
+3.	How would you modify your playbook to handle such failures more gracefully?
+
+The debug Module: This module can print statements during playbook execution, which can be very helpful for showing values of variables and understanding the flow of execution.
+
+
+
+
+
+
+
+
+4.: Your playbooks are taking too long to run, and you need to optimize their performance without sacrificing functionality.
+Questions:
+1.	What techniques would you use to improve the performance of your Ansible playbooks?
+
+1.. 当剧本执行时，每个剧本都会使用设置模块运行一项隐藏任务，称为 gathering facts。
+这会收集有关您正在自动化的远程节点的信息，详细信息可在变量 ansible_facts 下找到。
+但是，如果您没有在剧本中的任何地方使用这些详细信息，那么这就是浪费时间。
+您可以通过在剧本中设置 gather_facts: False 来禁用此操作。
+
+
+3. Configure parallelism
+
+The default value for forks is 5, 
+[defaults]
+inventory = ./hosts
+forks=50
+
+4. Configure SSH optimization
+
+Establishing a secure shell (SSH) connection is a relatively slow process that runs in the background. 
+
+You can use ControlMaster and ControlPersist features in ansible.cfg (in the ssh_connection section) to mitigate this issue.
+
+ControlMaster allows multiple simultaneous SSH sessions with a remote host to use a single network connection. This saves time on an SSH connection's initial processes because later SSH sessions use the first SSH connection for task execution.
+ControlPersist indicates how long the SSH keeps an idle connection open in the background. For example, ControlPersist=60s keeps the connection idle for 60 seconds:
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s
+
+5. 当 Ansible 使用 SSH 时，后台会发生多个 SSH 操作，用于复制文件、脚本和其他执行命令。您可以通过在 ansible.cfg 中启用管道参数（默认情况下禁用）来减少 SSH 连接的数量：
+pipelining = True
+
+
+
+2.	How would you address issues related to playbook execution time?
+
+1.在playbook中加入 callback plugins
+例如：
+[defaults]
+inventory = ./hosts
+callbacks_enabled = timer, profile_tasks, profile_roles
+返回结果会输出每个任务的运行时间
+
+
+
+3.	What role does parallelism play in optimizing playbook performance, and how can it be configured?
+
+The default value for forks is 5, 
+[defaults]
+inventory = ./hosts
+forks=50
+
+
+
+
+
+5. Scenario: You need to manage a dynamic infrastructure where servers are frequently added or removed. Your Ansible playbooks need to be aware of these changes in real time.
+Questions:
+1.	How would you handle dynamic inventories in Ansible?
+
+ 可以使用Cobbler来管理服务器
+
+[cobbler]
+
+# Set Cobbler's hostname or IP address
+host = http://127.0.0.1/cobbler_api
+
+# API calls to Cobbler can be slow. For this reason, we cache the results of an API
+# call. Set this to the path you want cache files to be written to. Two files
+# will be written to this directory:
+#   - ansible-cobbler.cache
+#   - ansible-cobbler.index
+
+cache_path = /tmp
+
+# The number of seconds a cache file is considered valid. After this many
+# seconds, a new API call will be made, and the cache file will be updated.
+
+cache_max_age = 900
+
+
+
+2.	What methods or plugins would you use to automatically update your inventory as infrastructure changes?
+
+
+3.	How would you ensure that your playbooks are always targeting the correct set of servers?
+
+
+6 Scenario: Your team is transitioning to a more modular approach to manage playbooks using roles. 
+You need to refactor existing playbooks to use Ansible roles and organize your codebase effectively.
+Questions:
+1.	How would you refactor existing playbooks to utilize Ansible roles?
+
+An Ansible role is a set of reusable tasks that you can use into multiple playbooks and even share with the community using Ansible Galaxy
+
+decide what your logical unit is you want to extract
+create a new role with ansible-galaxy init roles/<role-name>
+add the role to the playbook.yml
+move the tasks into roles/<role-name>/tasks/main.yml
+
+1. 创建角色
+ansible-galaxy init system_demo
+2. 将playbooks中的参数改成变量名
+变量存在
+/vars/main.yml
+剧本存在/tasks/main.yml
+3. 在palybooks中添加角色roles
+
+ There is the system_demo folder, which represents the role. This system_demo contains two folders, tasks and vars. There is a main.yml is each respective folder. The vars/main.yml contains the variables from playbook.yml. The tasks/main.yml contains the tasks from playbook.yml. The playbook.yml file has been modified to call the role rather than specifying vars and tasks directly. Here is a tree of the current working directory:
+
+
+2.	What are the benefits of using roles in Ansible, and how do they contribute to playbook organization?
+
+可重用性和共享性
+
+角色旨在成为可重用的自动化单元。由于角色可帮助您将自动化任务的逻辑分组与单个剧本或剧本的上下文分开，因此您可以在多个剧本或剧本中重用它们，并将它们共享以在其他项目中重用。
+
+模块化
+
+使用角色鼓励采用模块化自动化方法，其中每个角色负责特定的功能。这种方法使理解、维护和排除自动化代码故障变得更加容易。
+
+组织
+
+Ansible 角色提供了一种结构化的方式来组织任务、模板、文件和变量。这种结构使管理复杂的自动化设置变得更加容易，因为与特定角色相关的所有内容都包含在其目录中。
+
+参数化
+
+角色允许您定义默认变量，当角色在 Ansible 剧本中使用时，这些变量可以被覆盖。这使得更容易根据不同的环境或用例定制角色的行为，而无需修改角色本身。
+
+版本控制和依赖项管理
+
+角色可以进行版本控制，您可以在角色内的 meta/main.yml 文件中指定角色依赖项。因此，您可以明确管理版本和依赖项，确保不同环境中的稳定性和一致性。
+
+测试
+
+角色结构使应用测试方法变得更加容易。您可以编写特定于角色的测试，确保其在集成到更大的剧本之前按预期运行。
+
+简单性
+
+对于更大或更复杂的项目，角色简化了 Ansible 剧本的使用。您不必拥有包含所有任务、处理程序和模板的大型剧本，而是可以编写一个更简洁的剧本，人们可以轻松阅读和理解。这也使得识别新项目中可重复使用的角色变得更加容易 - 加快编写自动化内容所需的时间并简化工作流程。
+
+
+
+3.	How would you structure roles and handle dependencies between them?
+
+
+
+
+7. Scenario: You need to deploy a complex application with multiple components (e.g., web servers, application servers, databases) using Ansible. The deployment requires coordination between these components.
+Questions:
+1.	How would you design an Ansible playbook to manage a multi-component deployment?
+从底层到表层
+先安装基础组件，例如数据库，java，maven，npm这些的
+然后将每个任务分成不同的角色
+
+2.	What strategies would you use to ensure that the deployment is consistent and reliable across all components?
+我们可以将配置脚本存放在github中，每个服务器都是从github仓库中获取配置文件。
+在执行脚本中，可以添加when语句来判断系统环境，如果环境不一致则更新或者卸载重新安装
+
+3.	How would you manage component-specific configurations and coordinate updates between different components?
+
+
+8. .Scenario: You are integrating Ansible with a CI/CD pipeline to automate deployment processes as part of a continuous integration and delivery workflow.
+Questions:
+1.	How would you set up Ansible to work within a CI/CD pipeline?
+2.	What tools or platforms would you use to trigger Ansible playbooks from your CI/CD pipeline?
+3.	How would you handle the deployment of changes to different environments (e.g., staging, production) using Ansible within the pipeline?
